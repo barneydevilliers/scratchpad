@@ -1,2 +1,5 @@
 *DS_STORE
 history.yml
+*.swp
+queue_status.yaml
+Gemfile.lock

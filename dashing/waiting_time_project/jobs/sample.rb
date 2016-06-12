@@ -1,5 +1,7 @@
-current_valuation = 0
-current_karma = 0
+require 'yaml'
+
+QUEUE_FILE_NAME = 'queue_status.yaml'
+
 
 class AverageProcessingEstimator
   def initialize(initial_estimate)
@@ -15,9 +17,9 @@ end
 
 class QueueWaitEstimator
   def initialize
+    read_queue_status_file
     @average_processing_estimator = AverageProcessingEstimator.new(30)
-    @size_of_queue = 10
-    @last_queue_exit_timestamp = Time.now
+
   end
 
   def queue_size_update(size)
@@ -28,7 +30,14 @@ class QueueWaitEstimator
 
   end
 
+  def read_queue_status_file
+    queue_status = YAML::load_file(QUEUE_FILE_NAME) rescue d = {}
+    @last_queue_exit_timestamp = Time.parse(queue_status['last_exit_timestamp']) rescue Time.now
+    @size_of_queue = queue_status['queue_size'] rescue 0
+  end
+
   def to_s
+    read_queue_status_file
     estimate_time_text
   end
 
@@ -61,19 +70,17 @@ class QueueWaitEstimator
 
 end
 
+
+queue_status = YAML::load_file(QUEUE_FILE_NAME) rescue d = {}
+queue_status['queue_size'] = 0
+queue_status['last_exit_timestamp'] = Time.now.to_s
+File.open(QUEUE_FILE_NAME, 'w') {|f| f.write queue_status.to_yaml } #Store
+
 estimator = QueueWaitEstimator.new
 
 
+
+
 SCHEDULER.every '1s' do
-  last_valuation = current_valuation
-  last_karma     = current_karma
-  current_valuation = rand(100)
-  current_karma     = rand(200000)
-
-
-
   send_event('welcome', { text: "#{estimator}"})
-  #send_event('valuation', { current: current_valuation, last: last_valuation })
-  #send_event('karma', { current: current_karma, last: last_karma })
-  #send_event('synergy',   { value: rand(100) })
 end
