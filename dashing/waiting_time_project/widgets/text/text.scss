@@ -1,10 +1,10 @@
 // ----------------------------------------------------------------------------
 // Sass declarations
 // ----------------------------------------------------------------------------
-$background-color:  #ec663c;
+$background-color:  #ffffff;
 
-$title-color:       rgba(255, 255, 255, 0.7);
-$moreinfo-color:    rgba(255, 255, 255, 0.7);
+$title-color:       #004c5f;
+$moreinfo-color:    #004c5f;
 
 // ----------------------------------------------------------------------------
 // Widget-text styles
@@ -13,8 +13,14 @@ $moreinfo-color:    rgba(255, 255, 255, 0.7);
 
   background-color: $background-color;
 
+
   .title {
     color: $title-color;
+    font-family: "Arial Black", Gadget, sans-serif;
+	  font-size: 200px;
+	  font-style: normal;
+	  font-variant: normal;
+	  font-weight: bold;
   }
 
   .more-info {
