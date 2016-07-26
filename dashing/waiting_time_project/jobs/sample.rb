@@ -1,4 +1,18 @@
 require 'yaml'
+require 'serialport'
+
+def read_range
+  ser = SerialPort.new("/dev/ttyUSB0", 115200, 8, 1, SerialPort::NONE)
+  ser.read_timeout= 1000
+  distance = nil
+  while distance.nil? do
+    sleep(0.02)
+    line = ser.readline("\r")
+    distance = /(\d*[.]\d*)(?= m)/.match(line)
+    return distance[0].to_f if distance
+  end
+end
+
 
 QUEUE_FILE_NAME = 'queue_status.yaml'
 
@@ -42,7 +56,7 @@ class QueueWaitEstimator
   end
 
   def estimate_time_text
-    seconds_to_units(estimate_time_seconds)
+    "range #{read_range.to_s} #{seconds_to_units(estimate_time_seconds)}"
   end
 
   def estimate_time_seconds
