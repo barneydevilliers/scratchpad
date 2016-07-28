@@ -1,19 +1,34 @@
 require 'yaml'
 require 'serialport'
 
-def read_range
-  names_to_try = ["/dev/ttyUSB0","/dev/ttyUSB1"]
-
-  ser = nil
-  names_to_try.each do | name |
-    puts "trying #{name}"
-    if ser.nil? then
-      ser = SerialPort.new(name, 115200, 8, 1, SerialPort::NONE) rescue nil
-    end
+class RangeFinderQueueSize
+  def initialize(length_per_unit:, zero_point_distance:)
+    @length_per_unit = length_per_unit
+    @zero_point_distance = zero_point_distance
   end
 
-  if ser
-    ser.read_timeout= 1000
+  def size
+    length_of_units_in_queue = @zero_point_distance - read_range
+    length_of_units_in_queue = 0 if length_of_units_in_queue < 0
+    (length_of_units_in_queue / @length_per_unit).floor
+  end
+
+  private
+
+  def read_range
+    ser = nil
+    (0..9).to_a.each do | number |
+      portname = "/dev/ttyUSB#{number}"
+      if ser.nil? then
+        ser = SerialPort.new(portname, 115200, 8, 1, SerialPort::NONE) rescue nil
+      else
+        break
+      end
+    end
+
+    raise RuntimeError 'No serial port to bind to' if ser.nil?
+
+    ser.read_timeout=200
     distance = nil
     while distance.nil? do
       sleep(0.02)
@@ -21,11 +36,8 @@ def read_range
       distance = /(\d*[.]\d*)(?= m)/.match(line)
       return distance[0].to_f if distance
     end
-  else
-    return -1
   end
 end
-
 
 QUEUE_FILE_NAME = 'queue_status.yaml'
 
@@ -44,16 +56,9 @@ end
 
 class QueueWaitEstimator
   def initialize
+    @average_time_per_unit = 30
     read_queue_status_file
     @average_processing_estimator = AverageProcessingEstimator.new(30)
-
-  end
-
-  def queue_size_update(size)
-
-  end
-
-  def queue_exit_event
 
   end
 
@@ -64,28 +69,22 @@ class QueueWaitEstimator
   end
 
   def to_s
-    read_queue_status_file
-    estimate_time_text
-  end
+    #read_queue_status_file
+    previous_size_of_queue = @size_of_queue.size
+    @size_of_queue = RangeFinderQueueSize.new(length_per_unit: 1, zero_point_distance: 6)
+    @last_queue_exit_timestamp = Time.now if previous_size_of_queue != @size_of_queue.size
 
-  def estimate_time_text
-    "range #{read_range.to_s} #{seconds_to_units(estimate_time_seconds)}"
-  end
+    estimate_time_seconds = (@size_of_queue.size * @average_time_per_unit) + estimate_time_remaining_with_current_unit
 
-  def estimate_time_seconds
-    queue_wait_time + estimate_time_remaining_with_current_processing
+    "#{seconds_to_units(estimate_time_seconds)}"
   end
 
   private
 
-  def estimate_time_remaining_with_current_processing
-    remaining = @average_processing_estimator.estimate - (Time.now - @last_queue_exit_timestamp).to_i
+  def estimate_time_remaining_with_current_unit
+    remaining = @average_time_per_unit - (Time.now - @last_queue_exit_timestamp).to_i
     remaining = 0 if remaining < 0
     remaining
-  end
-
-  def queue_wait_time
-    @average_processing_estimator.estimate * @size_of_queue
   end
 
   def seconds_to_units(total_seconds)
@@ -94,7 +93,6 @@ class QueueWaitEstimator
 
     "%d" % minutes + ':' + "%.2d" % seconds
   end
-
 end
 
 
@@ -108,6 +106,6 @@ estimator = QueueWaitEstimator.new
 
 
 
-SCHEDULER.every '1s' do
+SCHEDULER.every '0.5s' do
   send_event('welcome', { text: "#{estimator}"})
 end
