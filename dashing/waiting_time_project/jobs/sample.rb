@@ -2,14 +2,27 @@ require 'yaml'
 require 'serialport'
 
 def read_range
-  ser = SerialPort.new("/dev/ttyUSB0", 115200, 8, 1, SerialPort::NONE)
-  ser.read_timeout= 1000
-  distance = nil
-  while distance.nil? do
-    sleep(0.02)
-    line = ser.readline("\r")
-    distance = /(\d*[.]\d*)(?= m)/.match(line)
-    return distance[0].to_f if distance
+  names_to_try = ["/dev/ttyUSB0","/dev/ttyUSB1"]
+
+  ser = nil
+  names_to_try.each do | name |
+    puts "trying #{name}"
+    if ser.nil? then
+      ser = SerialPort.new(name, 115200, 8, 1, SerialPort::NONE) rescue nil
+    end
+  end
+
+  if ser
+    ser.read_timeout= 1000
+    distance = nil
+    while distance.nil? do
+      sleep(0.02)
+      line = ser.readline("\r")
+      distance = /(\d*[.]\d*)(?= m)/.match(line)
+      return distance[0].to_f if distance
+    end
+  else
+    return -1
   end
 end
 
