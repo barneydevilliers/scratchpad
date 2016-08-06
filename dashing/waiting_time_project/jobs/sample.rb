@@ -5,6 +5,8 @@ class RangeFinderQueueSize
   def initialize(length_per_unit:, zero_point_distance:)
     @length_per_unit = length_per_unit
     @zero_point_distance = zero_point_distance
+
+    connect_to_device
   end
 
   def size
@@ -15,8 +17,13 @@ class RangeFinderQueueSize
 
   private
 
-  def read_range
+  def connect_to_device
+    @port = find_and_connect_to_port
+  end
+
+  def find_and_connect_to_port
     ser = nil
+    portname = ''
     (0..9).to_a.each do | number |
       portname = "/dev/ttyUSB#{number}"
       if ser.nil? then
@@ -26,13 +33,20 @@ class RangeFinderQueueSize
       end
     end
 
-    raise RuntimeError 'No serial port to bind to' if ser.nil?
-
+    $stderr.puts 'No serial port to bind to' if ser.nil?
+    return 0 if ser.nil?
+    $stderr.puts "Connected to #{portname}"
     ser.read_timeout=200
+    ser
+  end
+
+
+  def read_range
     distance = nil
     while distance.nil? do
       sleep(0.02)
-      line = ser.readline("\r")
+      line = @port.readline("\r")
+      $stderr.puts line
       distance = /(\d*[.]\d*)(?= m)/.match(line)
       return distance[0].to_f if distance
     end
@@ -54,12 +68,15 @@ class AverageProcessingEstimator
   end
 end
 
+@queue_size = RangeFinderQueueSize.new(length_per_unit: 1, zero_point_distance: 6)
+
 class QueueWaitEstimator
-  def initialize
+  def initialize(queue_size)
+    @queue_size = queue_size
     @average_time_per_unit = 30
     read_queue_status_file
     @average_processing_estimator = AverageProcessingEstimator.new(30)
-
+    @previous_size_of_queue = 0
   end
 
   def read_queue_status_file
@@ -70,11 +87,10 @@ class QueueWaitEstimator
 
   def to_s
     #read_queue_status_file
-    previous_size_of_queue = @size_of_queue.size
-    @size_of_queue = RangeFinderQueueSize.new(length_per_unit: 1, zero_point_distance: 6)
-    @last_queue_exit_timestamp = Time.now if previous_size_of_queue != @size_of_queue.size
-
-    estimate_time_seconds = (@size_of_queue.size * @average_time_per_unit) + estimate_time_remaining_with_current_unit
+    current_size = @queue_size.size
+    @last_queue_exit_timestamp = Time.now if @previous_size_of_queue != current_size
+    estimate_time_seconds = (current_size * @average_time_per_unit) + estimate_time_remaining_with_current_unit
+    @previous_size_of_queue = current_size
 
     "#{seconds_to_units(estimate_time_seconds)}"
   end
@@ -101,7 +117,7 @@ queue_status['queue_size'] = 0
 queue_status['last_exit_timestamp'] = Time.now.to_s
 File.open(QUEUE_FILE_NAME, 'w') {|f| f.write queue_status.to_yaml } #Store
 
-estimator = QueueWaitEstimator.new
+estimator = QueueWaitEstimator.new(@queue_size)
 
 
 
